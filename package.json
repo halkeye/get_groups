@@ -1,0 +1,23 @@
+{
+  "name": "get_groups",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "googleapis": "^14.1.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/halkeye/get_groups.git"
+  },
+  "author": "Gavin Mogan <npm@gavinmogan.com> (https://www.gavinmogan.com/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/halkeye/get_groups/issues"
+  },
+  "homepage": "https://github.com/halkeye/get_groups#readme"
+}
