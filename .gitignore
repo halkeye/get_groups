@@ -50,3 +50,4 @@ jspm_packages
 
 .envrc
 .credentials.json
+public/index.html

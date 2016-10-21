@@ -2,6 +2,9 @@ var fs = require('fs');
 var google = require('googleapis');
 var OAuth2 = google.auth.OAuth2;
 var inquirer = require('inquirer');
+var template = require('lodash').template;
+var sortBy = require('lodash').sortBy;
+var mkdir = require("mkdir-promise");
 
 var oauth2Client = new OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -39,6 +42,7 @@ function getGroups(domain) {
     });
   });
 }
+
 /*
 function getGroupAliases(groupKey) {
   var admin = google.admin('directory_v1');
@@ -109,35 +113,67 @@ function getCredentials() {
   });
 }
 
-getCredentials().then(function(tokens) {
-  oauth2Client.setCredentials(tokens);
-  // set auth as a global default
-  google.options({ auth: oauth2Client });
-}).then(function() {
 
-  return getDomain().then(function(domain) {
-    return getGroups(domain).then(function (groups) {
-      var promises = groups.map(function(group) {
-        return getGroupMembers(group.id).then(function(members) {
-          group.members = [];
-          return Promise.all(members.map(function(member) {
-            return getUser(member.id).catch(function() {
-              /* if not found, i don't care */
-              return member
-            }).then(function(member) {
-              group.members.push(member);
+function makeGroupsJson() {
+  return getCredentials().then(function(tokens) {
+    oauth2Client.setCredentials(tokens);
+    // set auth as a global default
+    google.options({ auth: oauth2Client });
+  }).then(function() {
+
+    return getDomain().then(function(domain) {
+      return getGroups(domain).then(function (groups) {
+        var promises = groups.map(function(group) {
+          return getGroupMembers(group.id).then(function(members) {
+            group.members = [];
+            return Promise.all(members.map(function(member) {
+              return getUser(member.id).catch(function() {
+                /* if not found, i don't care */
+                return member
+              }).then(function(member) {
+                group.members.push(member);
+              });
+            })).then(function() {
+              sortBy(group.members, ['id']);
+              return group;
             });
-          })).then(function() {
-            return group;
           });
         });
+        return Promise.all(promises);
       });
-      return Promise.all(promises);
+    });
+  }).then(function(groups) {
+    console.log(JSON.stringify(groups, null, '\t'));
+    return groups;
+  }).catch(function(err) {
+    console.error('err', err);
+  });
+}
+
+function makeHtmlFile(groups) {
+  return new Promise(function(resolve, reject) {
+    fs.readFile('./template.html', function(err, contents) {
+      if (err) { return reject(err); }
+
+      var compiled = template(contents);
+      return resolve(compiled({groups: groups}));
+    });
+  }).then(function(html) {
+    return mkdir('public').then(function() {
+      return new Promise(function(resolve, reject) {
+        fs.writeFile('public/index.html', html, function(err) {
+          if (err) { return reject(err); }
+          resolve();
+        });
+      });
     });
   });
-}).then(function(groups) {
-  console.log(JSON.stringify(groups, null, '\t'));
-  return groups;
-}).catch(function(err) {
-  console.error('err', err);
-});
+}
+
+if (require.main === module) {
+  makeGroupsJson().then(makeHtmlFile);
+}
+module.exports = {
+  makeGroupsJson: makeGroupsJson,
+  makeHtmlFile: makeHtmlFile
+}

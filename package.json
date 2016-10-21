@@ -5,7 +5,9 @@
   "main": "index.js",
   "dependencies": {
     "googleapis": "^14.1.0",
-    "inquirer": "^1.2.2"
+    "inquirer": "^1.2.2",
+    "lodash": "^4.16.4",
+    "mkdir-promise": "^1.0.0"
   },
   "devDependencies": {
     "eslint": "^3.8.1"
