@@ -4,9 +4,12 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "googleapis": "^14.1.0"
+    "googleapis": "^14.1.0",
+    "inquirer": "^1.2.2"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "eslint": "^3.8.1"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
