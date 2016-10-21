@@ -10,3 +10,5 @@ This Simple little script will output an html page with all the groups and the m
 `node index.js`
 
 This will create `public/index.html` and output the group data to stdout.
+
+First time you run it, it'll ask you to goto a url, and enter the code it returns.
