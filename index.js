@@ -100,7 +100,7 @@ function getUser(user) {
 
 function getCredentials() {
   return new Promise(function(resolve, reject) {
-    var file = 'sauce-get-groups-f91bad07e092.json';
+    var file = process.env.GOOGLE_ACCOUNT_FILE || 'sauce-get-groups-f91bad07e092.json';
     fs.readFile(file, function(err, contents) {
       if (err) { return reject(err); }
       var key = JSON.parse(contents);
