@@ -136,7 +136,7 @@ function makeGroupsJson() {
                 group.members.push(member);
               });
             })).then(function() {
-              sortBy(group.members, ['id']);
+              sortBy(group.members, ['email']);
               return group;
             });
           });
