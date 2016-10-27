@@ -3,13 +3,21 @@ var google = require('googleapis');
 var template = require('lodash').template;
 var sortBy = require('lodash').sortBy;
 var mkdir = require('mkdir-promise');
+var program = require('commander');
+
+program
+  .option('-c, --cache-dir <dir>', 'Directory to write cache to')
+  .option('-e, --email <email>', 'Email address to impersonate')
+  .option('-i, --ignore <csv>', 'Comma Seperated list of group ids to ignore')
+  .parse(process.argv)
 
 var Cache = require('async-disk-cache');
 var cache = new Cache('get-groups', {
-  location: './cache'
+  location: program.cacheDir || './cache'
 });
 
-var email = process.argv[2] || process.env.EMAIL;
+var email = program.email || process.env.EMAIL || process.argv[2];
+var filteredOutGroupIds = (program.ignore || '').split(',');
 
 // generate a url that asks permissions for Google+ and Google Calendar scopes
 var scopes = [
@@ -39,7 +47,9 @@ function getGroups(domain) {
       if (err) { reject(err); }
       else { resolve(response.groups); }
     });
-  });
+  })
+  .then(groups => groups.filter(group => !/\*HIDDEN\*/.test(group.description)))
+  .then(groups => groups.filter(group => filteredOutGroupIds.indexOf(group.id) === -1 ));
 }
 
 /*
