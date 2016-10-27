@@ -51,3 +51,6 @@ jspm_packages
 .envrc
 .credentials.json
 public/index.html
+cache/
+sauce-get-groups-f91bad07e092.json
+groups.json

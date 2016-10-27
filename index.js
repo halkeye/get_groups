@@ -1,27 +1,26 @@
 var fs = require('fs');
 var google = require('googleapis');
-var OAuth2 = google.auth.OAuth2;
-var inquirer = require('inquirer');
 var template = require('lodash').template;
 var sortBy = require('lodash').sortBy;
-var mkdir = require("mkdir-promise");
+var mkdir = require('mkdir-promise');
 
-var oauth2Client = new OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URL
-);
+var Cache = require('async-disk-cache');
+var cache = new Cache('get-groups', {
+  location: './cache'
+});
+
+var email = process.argv[2] || process.env.EMAIL;
 
 // generate a url that asks permissions for Google+ and Google Calendar scopes
 var scopes = [
   'email',
   'profile',
-  // 'https://www.googleapis.com/auth/userinfo.profile',
-  'https://www.googleapis.com/auth/admin.directory.group.member.readonly',
   'https://www.googleapis.com/auth/admin.directory.group.readonly',
+  'https://www.googleapis.com/auth/admin.directory.group.member.readonly',
 	'https://www.googleapis.com/auth/admin.directory.user.readonly',
 	'https://www.googleapis.com/auth/admin.directory.user.alias.readonly'
-];
+]//.map(scope => scope.replace('.readonly', ''));
+console.log(scopes.join(','));
 
 function getDomain() {
   var plus = google.plus('v1');
@@ -55,79 +54,82 @@ function getGroupAliases(groupKey) {
 }
 */
 
-function getGroupMembers(groupKey) {
+function getGroupMembers(group) {
   var admin = google.admin('directory_v1');
+  var key = `groupMembers:${group.id}:${group.etag}`;
   return new Promise(function (resolve, reject) {
-    admin.members.list({ groupKey: groupKey }, function(err, response) {
-      if (err) { reject(err); }
-      else { resolve(response.members); }
-    });
+    cache.get(key).then(members => {
+      if (!members.isCached) {
+        admin.members.list({ groupKey: group.id }, function(err, response) {
+          //if (err) { reject(err); }
+          if (err) {
+            console.error("error getting group members for", group.id, err);
+            resolve([]);
+          }
+          else {
+            cache.set(key, JSON.stringify(response.members || []));
+            resolve(response.members || []);
+          }
+        });
+      } else {
+        resolve(JSON.parse(members.value));
+      }
+    }).catch(err => reject(err));
   });
 }
 
-function getUser(userKey) {
+function getUser(user) {
   var admin = google.admin('directory_v1');
+  var key = `user:${user.id}:${user.etag}`;
   return new Promise(function (resolve, reject) {
-    admin.users.get({ userKey: userKey }, function(err, response) {
-      if (err) { reject(err); }
-      else { resolve(response); }
+    cache.get(key).then(data => {
+      if (!data.isCached) {
+        admin.users.get({ userKey: user.id }, function(err, response) {
+          if (err) { reject(err); }
+          else {
+            cache.set(key, JSON.stringify(response || {}));
+            resolve(response || {});
+          }
+        });
+      } else {
+        resolve(JSON.parse(data.value));
+      }
     });
   });
 }
 
 function getCredentials() {
   return new Promise(function(resolve, reject) {
-    if (!fs.existsSync('./.credentials.json')) {
-      // which at the moment can't happen because of the require erroring
-      var url = oauth2Client.generateAuthUrl({
-        // 'online' (default) or 'offline' (gets refresh_token)
-        access_type: 'offline',
-
-        // If you only need one scope you can pass it as string
-        scope: scopes
+    var file = 'sauce-get-groups-f91bad07e092.json';
+    fs.readFile(file, function(err, contents) {
+      if (err) { return reject(err); }
+      var key = JSON.parse(contents);
+      var jwtClient = new google.auth.JWT(
+        key.client_email,
+        null,
+        key.private_key,
+        scopes,
+        email
+      );
+      jwtClient.authorize(function (err) {
+        if (err) { return reject(err); }
+        google.options({ auth: jwtClient });
+        resolve();
       });
-      console.log('Authorize with');
-      console.log(url);
-      inquirer.prompt([{ type: 'input', name: 'code', message: 'Enter code from browser'}]).then(function(answers) {
-        oauth2Client.getToken(answers.code, function (err, tokens) {
-          // Now tokens contains an access_token and an optional refresh_token. Save them.
-          if (err) { return reject(err); }
-          fs.writeFileSync('.credentials.json', JSON.stringify(tokens));
-          oauth2Client.setCredentials(tokens);
-          resolve(tokens);
-        });
-      });
-    } else {
-      var tokens = require('./.credentials.json');
-      if(tokens.expiry_date <= new Date().getTime()) {
-        oauth2Client.setCredentials(tokens);
-        oauth2Client.refreshAccessToken(function(err, tokens) {
-          if (err) { return reject(err); }
-          fs.writeFileSync('.credentials.json', JSON.stringify(tokens));
-          resolve(tokens);
-        });
-      } else {
-        resolve(tokens);
-      }
-    }
+    });
   });
 }
 
 
 function makeGroupsJson() {
-  return getCredentials().then(function(tokens) {
-    oauth2Client.setCredentials(tokens);
-    // set auth as a global default
-    google.options({ auth: oauth2Client });
-  }).then(function() {
-
+  return getCredentials().then(function() {
     return getDomain().then(function(domain) {
       return getGroups(domain).then(function (groups) {
         var promises = groups.map(function(group) {
-          return getGroupMembers(group.id).then(function(members) {
+          return getGroupMembers(group).then(function(members) {
             group.members = [];
             return Promise.all(members.map(function(member) {
-              return getUser(member.id).catch(function() {
+              return getUser(member).catch(function() {
                 /* if not found, i don't care */
                 return member
               }).then(function(member) {
@@ -143,7 +145,7 @@ function makeGroupsJson() {
       });
     });
   }).then(function(groups) {
-    console.log(JSON.stringify(groups, null, '\t'));
+    fs.writeFileSync('groups.json', JSON.stringify(groups, null, '\t'));
     return groups;
   }).catch(function(err) {
     console.error('err', err);
