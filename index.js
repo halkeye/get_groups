@@ -4,6 +4,7 @@ var template = require('lodash').template;
 var sortBy = require('lodash').sortBy;
 var mkdir = require('mkdir-promise');
 var program = require('commander');
+var promisify = require('es6-promisify');
 
 program
   .option('-c, --cache-dir <dir>', 'Directory to write cache to')
@@ -23,6 +24,13 @@ var cache = new Cache('get-groups', {
 var email = program.email || process.env.EMAIL || process.argv[2];
 var filteredOutGroupIds = (program.ignore || '').split(',');
 
+var admin = google.admin('directory_v1');
+var plus = google.plus('v1');
+plus.people.getAsync = promisify(plus.people.get, plus.people);
+admin.members.listAsync = promisify(admin.members.list, admin.members);
+admin.groups.listAsync = promisify(admin.groups.list, admin.groups);
+admin.users.getAsync = promisify(admin.users.get, admin.users);
+
 // generate a url that asks permissions for Google+ and Google Calendar scopes
 var scopes = [
   'email',
@@ -35,25 +43,15 @@ var scopes = [
 console.log(scopes.join(','));
 
 function getDomain() {
-  var plus = google.plus('v1');
-  return new Promise(function(resolve, reject) {
-    plus.people.get({ userId: 'me' }, function(err, peopleResponse) {
-      if (err) { return reject(err); }
-      resolve(peopleResponse.domain);
-    });
-  });
+  return plus.people.getAsync({ userId: 'me' })
+    .then(response => response.domain);
 }
 
 function getGroups(domain) {
-  var admin = google.admin('directory_v1');
-  return new Promise(function (resolve, reject) {
-    admin.groups.list({ domain: domain }, function(err, response) {
-      if (err) { reject(err); }
-      else { resolve(response.groups); }
-    });
-  })
-  .then(groups => groups.filter(group => !/\*HIDDEN\*/.test(group.description)))
-  .then(groups => groups.filter(group => filteredOutGroupIds.indexOf(group.id) === -1 ));
+  return admin.groups.listAsync({ domain: domain })
+    .then(response => response.groups)
+    .then(groups => groups.filter(group => !/\*HIDDEN\*/.test(group.description)))
+    .then(groups => groups.filter(group => filteredOutGroupIds.indexOf(group.id) === -1 ));
 }
 
 /*
@@ -69,50 +67,45 @@ function getGroupAliases(groupKey) {
 */
 
 function getGroupMembers(group) {
-  var admin = google.admin('directory_v1');
   var key = `groupMembers:${group.id}:${group.etag}`;
-  return new Promise(function (resolve, reject) {
-    cache.get(key).then(members => {
-      if (!members.isCached) {
-        admin.members.list({ groupKey: group.id }, function(err, response) {
-          //if (err) { reject(err); }
-          if (err) {
-            if (Array.isArray(err.errors) && err.errors[0].reason === 'quotaExceeded') {
-              console.log('Quota expired for', group.id, 'retrying in 60');
-              return sleep(60).then(() => getGroupMembers(group));
-            }
-            console.error("error getting group members for", group.id, err);
-            reject(err);
+  return cache.get(key).then(members => {
+    if (!members.isCached) {
+      return admin.members.listAsync({ groupKey: group.id })
+        .then(response => {
+          cache.set(key, JSON.stringify(response.members || []));
+          return response.members || [];
+        }).catch(err => {
+          if (Array.isArray(err.errors) && err.errors[0].reason === 'quotaExceeded') {
+            console.log('getGroup - Quota expired for', group.id, 'retrying in 60');
+            return sleep(60).then(() => getGroupMembers(group));
           }
-          else {
-            cache.set(key, JSON.stringify(response.members || []));
-            resolve(response.members || []);
-          }
+          console.error("error getting group members for", group.id, err);
+          throw err;
         });
-      } else {
-        resolve(JSON.parse(members.value));
-      }
-    }).catch(err => reject(err));
+    } else {
+      return JSON.parse(members.value);
+    }
   });
 }
 
 function getUser(user) {
-  var admin = google.admin('directory_v1');
   var key = `user:${user.id}:${user.etag}`;
-  return new Promise(function (resolve, reject) {
-    cache.get(key).then(data => {
-      if (!data.isCached) {
-        admin.users.get({ userKey: user.id }, function(err, response) {
-          if (err) { reject(err); }
-          else {
-            cache.set(key, JSON.stringify(response || {}));
-            resolve(response || {});
+  return cache.get(key).then(data => {
+    if (!data.isCached) {
+      return admin.users.getAsync({ userKey: user.id })
+        .then(response => {
+          cache.set(key, JSON.stringify(response || {}));
+          return response || {};
+        }).catch(err => {
+          if (Array.isArray(err.errors) && err.errors[0].reason === 'quotaExceeded') {
+            console.log('getUser - Quota expired for', user.id, 'retrying in 60');
+            return sleep(60).then(() => getUser(user));
           }
+          throw err;
         });
-      } else {
-        resolve(JSON.parse(data.value));
-      }
-    });
+    } else {
+      return JSON.parse(data.value);
+    }
   });
 }
 
@@ -191,7 +184,7 @@ function makeHtmlFile(groups) {
 }
 
 if (require.main === module) {
-  makeGroupsJson().then(makeHtmlFile);
+  makeGroupsJson().then(makeHtmlFile).catch(err => console.err(err));
 }
 module.exports = {
   makeGroupsJson: makeGroupsJson,
