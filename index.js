@@ -82,7 +82,7 @@ function getGroupMembers(group) {
               return sleep(60).then(() => getGroupMembers(group));
             }
             console.error("error getting group members for", group.id, err);
-            resolve([]);
+            reject(err);
           }
           else {
             cache.set(key, JSON.stringify(response.members || []));
