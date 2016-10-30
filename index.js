@@ -11,6 +11,10 @@ program
   .option('-i, --ignore <csv>', 'Comma Seperated list of group ids to ignore')
   .parse(process.argv)
 
+function sleep(ms = 0) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
 var Cache = require('async-disk-cache');
 var cache = new Cache('get-groups', {
   location: program.cacheDir || './cache'
@@ -73,6 +77,10 @@ function getGroupMembers(group) {
         admin.members.list({ groupKey: group.id }, function(err, response) {
           //if (err) { reject(err); }
           if (err) {
+            if (Array.isArray(err.errors) && err.errors[0].reason === 'quotaExceeded') {
+              console.log('Quota expired for', group.id, 'retrying in 60');
+              return sleep(60).then(() => getGroupMembers(group));
+            }
             console.error("error getting group members for", group.id, err);
             resolve([]);
           }
