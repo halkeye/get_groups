@@ -75,12 +75,19 @@ function getGroupMembers(group) {
           cache.set(key, JSON.stringify(response.members || []));
           return response.members || [];
         }).catch(err => {
-          if (Array.isArray(err.errors) && err.errors[0].reason === 'quotaExceeded') {
-            console.log('getGroup - Quota expired for', group.id, 'retrying in 60');
-            return sleep(60).then(() => getGroupMembers(group));
+          if (Array.isArray(err.errors)) {
+            if (err.errors[0].reason === 'quotaExceeded') {
+              console.log('getGroup - Quota expired for', group.id, 'retrying in 60');
+              return sleep(60).then(() => getGroupMembers(group));
+            }
+            if (err.errors[0].reason === 'backendError') {
+              console.log('getGroup - Backend error for', group.id, 'retrying in 60');
+              return sleep(60).then(() => getGroupMembers(group));
+            }
           }
           console.error("error getting group members for", group.id, err);
-          throw err;
+          return [];
+          // throw err;
         });
     } else {
       return JSON.parse(members.value);
