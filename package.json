@@ -7,7 +7,7 @@
     "async-disk-cache": "^1.0.8",
     "commander": "^2.9.0",
     "es6-promisify": "^5.0.0",
-    "googleapis": "^16.0.0",
+    "googleapis": "^17.1.0",
     "lodash": "^4.16.4",
     "mkdir-promise": "^1.0.0"
   },
