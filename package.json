@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "async-disk-cache": "^1.0.8",
     "commander": "^2.9.0",
     "es6-promisify": "^5.0.0",
     "googleapis": "^18.0.0",

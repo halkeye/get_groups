@@ -7,7 +7,6 @@ var program = require('commander');
 var promisify = require('es6-promisify');
 
 program
-  .option('-c, --cache-dir <dir>', 'Directory to write cache to')
   .option('-e, --email <email>', 'Email address to impersonate')
   .option('-i, --ignore <csv>', 'Comma Seperated list of group ids to ignore')
   .parse(process.argv)
@@ -16,10 +15,20 @@ function sleep(ms = 0) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-var Cache = require('async-disk-cache');
-var cache = new Cache('get-groups', {
-  location: program.cacheDir || './cache'
-});
+class Cache {
+  constructor() {
+    this._cache = {};
+  }
+
+  get(key) {
+    return Promise.resolve(this._cache[key]);
+  }
+
+  set(key, val) {
+    this._cache[key] = val;
+  }
+};
+var cache = new Cache();
 
 var email = program.email || process.env.EMAIL || process.argv[2];
 var filteredOutGroupIds = (program.ignore || '').split(',');
@@ -69,7 +78,7 @@ function getGroupAliases(groupKey) {
 function getGroupMembers(group) {
   var key = `groupMembers:${group.id}:${group.etag}`;
   return cache.get(key).then(members => {
-    if (!members.isCached) {
+    if (!members) {
       return admin.members.listAsync({ groupKey: group.id })
         .then(response => {
           cache.set(key, JSON.stringify(response.members || []));
@@ -98,7 +107,7 @@ function getGroupMembers(group) {
 function getUser(user) {
   var key = `user:${user.id}:${user.etag}`;
   return cache.get(key).then(data => {
-    if (!data.isCached) {
+    if (!data) {
       return admin.users.getAsync({ userKey: user.id })
         .then(response => {
           cache.set(key, JSON.stringify(response || {}));
