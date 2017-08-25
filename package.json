@@ -6,7 +6,7 @@
   "dependencies": {
     "commander": "^2.9.0",
     "es6-promisify": "^5.0.0",
-    "googleapis": "^20.0.0",
+    "googleapis": "^21.2.0",
     "lodash": "^4.16.4",
     "mkdir-promise": "^1.0.0"
   },
