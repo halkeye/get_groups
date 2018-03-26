@@ -1,10 +1,10 @@
 var fs = require('fs');
-var google = require('googleapis');
+var {google} = require('googleapis');
 var template = require('lodash').template;
 var sortBy = require('lodash').sortBy;
 var mkdir = require('mkdir-promise');
 var program = require('commander');
-var promisify = require('es6-promisify');
+var {promisify} = require('es6-promisify');
 
 program
   .option('-e, --email <email>', 'Email address to impersonate')
@@ -27,7 +27,7 @@ class Cache {
   set(key, val) {
     this._cache[key] = val;
   }
-};
+}
 var cache = new Cache();
 
 var email = program.email || process.env.EMAIL || process.argv[2];
@@ -53,11 +53,13 @@ console.log(scopes.join(','));
 
 function getDomain() {
   return plus.people.getAsync({ userId: 'me' })
-    .then(response => response.domain);
+    .then(response => response.data)
+    .then(response => response.domain)
 }
 
 function getGroups(domain) {
   return admin.groups.listAsync({ domain: domain })
+    .then(response => response.data)
     .then(response => response.groups)
     .then(groups => groups.filter(group => !/\*HIDDEN\*/.test(group.description)))
     .then(groups => groups.filter(group => filteredOutGroupIds.indexOf(group.id) === -1 ));
@@ -69,7 +71,7 @@ function getGroupAliases(groupKey) {
   return new Promise(function (resolve, reject) {
     admin.groups.aliases.list({ groupKey: groupKey }, function(err, response) {
       if (err) { reject(err); }
-      else { resolve(response); }
+      else { resolve(response.data); }
     });
   });
 }
@@ -80,6 +82,7 @@ function getGroupMembers(group) {
   return cache.get(key).then(members => {
     if (!members) {
       return admin.members.listAsync({ groupKey: group.id })
+        .then(response => response.data)
         .then(response => {
           cache.set(key, JSON.stringify(response.members || []));
           return response.members || [];
@@ -109,6 +112,7 @@ function getUser(user) {
   return cache.get(key).then(data => {
     if (!data) {
       return admin.users.getAsync({ userKey: user.id })
+        .then(response => response.data)
         .then(response => {
           cache.set(key, JSON.stringify(response || {}));
           return response || {};
@@ -150,27 +154,27 @@ function getCredentials() {
 
 function makeGroupsJson() {
   return getCredentials().then(function() {
-    return getDomain().then(function(domain) {
-      return getGroups(domain).then(function (groups) {
-        var promises = groups.map(function(group) {
-          return getGroupMembers(group).then(function(members) {
-            group.members = [];
-            return Promise.all(members.map(function(member) {
-              return getUser(member).catch(function() {
-                /* if not found, i don't care */
-                return member
-              }).then(function(member) {
-                group.members.push(member);
-              });
-            })).then(function() {
-              sortBy(group.members, ['email']);
-              return group;
-            });
+    return getDomain();
+  }).then(function(domain) {
+    return getGroups(domain);
+  }).then(function (groups) {
+    var promises = groups.map(function(group) {
+      return getGroupMembers(group).then(function(members) {
+        group.members = [];
+        return Promise.all(members.map(function(member) {
+          return getUser(member).catch(function() {
+            /* if not found, i don't care */
+            return member
+          }).then(function(member) {
+            group.members.push(member);
           });
+        })).then(function() {
+          sortBy(group.members, ['email']);
+          return group;
         });
-        return Promise.all(promises);
       });
     });
+    return Promise.all(promises);
   }).then(function(groups) {
     fs.writeFileSync('groups.json', JSON.stringify(groups, null, '\t'));
     return groups;
