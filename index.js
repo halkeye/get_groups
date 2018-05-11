@@ -8,6 +8,7 @@ var {promisify} = require('es6-promisify');
 
 program
   .option('-e, --email <email>', 'Email address to impersonate')
+  .option('-d, --domain <domain>', 'Overide/hardcode domain name to lookup')
   .option('-i, --ignore <csv>', 'Comma Seperated list of group ids to ignore')
   .parse(process.argv)
 
@@ -49,9 +50,11 @@ var scopes = [
 	'https://www.googleapis.com/auth/admin.directory.user.readonly',
 	'https://www.googleapis.com/auth/admin.directory.user.alias.readonly'
 ]//.map(scope => scope.replace('.readonly', ''));
-console.log(scopes.join(','));
 
 function getDomain() {
+  if (program.domain) {
+    return Promise.resolve(program.domain);
+  }
   return plus.people.getAsync({ userId: 'me' })
     .then(response => response.data)
     .then(response => response.domain)
