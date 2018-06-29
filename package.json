@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "commander": "^2.15.1",
+    "commander": "^2.16.0",
     "es6-promisify": "^6.0.0",
     "googleapis": "^32.0.0",
     "lodash": "^4.17.10",
