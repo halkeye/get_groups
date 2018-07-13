@@ -1,5 +1,7 @@
 # get_groups
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/halkeye/get_groups.svg)](https://greenkeeper.io/)
+
 ## Purpose
 
 Google doesn't provide a simple way for end users to see whose in groups and such. 
